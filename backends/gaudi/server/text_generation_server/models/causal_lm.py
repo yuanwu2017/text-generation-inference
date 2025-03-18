@@ -1284,7 +1284,7 @@ class CausalLM(Model):
         decode_ns = time.time_ns() - start_decode
         return generations, batch if not stopped else None, (forward_ns, decode_ns)
 
-    def generate_warmup_batch(self, request, seq_len, batch_size):
+    def generate_warmup_batch(self, request, seq_len, batch_size, do_sample=False):
         batch = copy.deepcopy(request.batch)
         for req in batch.requests:
             req.truncate = seq_len
@@ -1292,6 +1292,8 @@ class CausalLM(Model):
         for i in range(len(batch.requests) - batch_size):
             batch.requests.pop()
 
+        for r in batch.requests:
+            r.parameters.do_sample = do_sample
         return self.batch_type.from_pb(batch, self.tokenizer, self.dtype, self.device)
 
     def warmup(
@@ -1300,6 +1302,7 @@ class CausalLM(Model):
         assert (
             MAX_BATCH_SIZE is not None
         ), "MAX_BATCH_SIZE is not set, it should be set in the launcher"
+        start = time.time()
         MAX_BATCH_TOTAL_TOKENS = MAX_BATCH_SIZE * request.max_total_tokens
         logger.info(f"MAX_BATCH_SIZE: {MAX_BATCH_SIZE}")
         logger.info(f"MAX_BATCH_TOTAL_TOKENS: {MAX_BATCH_TOTAL_TOKENS}")
@@ -1309,6 +1312,7 @@ class CausalLM(Model):
             request.batch, self.tokenizer, self.dtype, self.device
         )
         max_prefill_batch_size = batch.input_ids.shape[0]
+        logger.info(f"""max_prefill_batch_size: {max_prefill_batch_size}""")
         try:
             # max prefill batch size warmup
             _, prefill_batch, _ = self.generate_token([batch])
@@ -1376,29 +1380,36 @@ class CausalLM(Model):
         decode_batch_size_list.sort(reverse=True)
 
         try:
-            for batch_size in decode_batch_size_list:
-                batches = []
-                iters = math.floor(batch_size / max_prefill_batch_size)
-                for i in range(iters):
-                    batch = self.generate_warmup_batch(
-                        request, PAD_SEQUENCE_TO_MULTIPLE_OF - 1, max_prefill_batch_size
-                    )
-                    _, prefill_batch, _ = self.generate_token([batch])
-                    batches.append(prefill_batch)
+            do_samples = [True, False]
+            logger.info(f"Warmup {len(do_samples)*len(decode_batch_size_list)} cases of decode batch sizes.")
+            i = 0
+            for do_sample in do_samples:
+                for batch_size in decode_batch_size_list:
+                    logger.info(f"Warmup case {i}: batch_szie={batch_size}, do_sample={do_sample}")
+                    i = i + 1
+                    batches = []
+                    iters = math.floor(batch_size / max_prefill_batch_size)
+                    for i in range(iters):
+                        batch = self.generate_warmup_batch(
+                            request, PAD_SEQUENCE_TO_MULTIPLE_OF - 1, max_prefill_batch_size, do_sample
+                        )
+                        _, prefill_batch, _ = self.generate_token([batch])
+                        batches.append(prefill_batch)
 
-                if batch_size % max_prefill_batch_size != 0:
-                    batch = self.generate_warmup_batch(
-                        request,
-                        PAD_SEQUENCE_TO_MULTIPLE_OF - 1,
-                        batch_size % max_prefill_batch_size,
-                    )
-                    _, prefill_batch, _ = self.generate_token([batch])
-                    batches.append(prefill_batch)
+                    if batch_size % max_prefill_batch_size != 0:
+                        batch = self.generate_warmup_batch(
+                            request,
+                            PAD_SEQUENCE_TO_MULTIPLE_OF - 1,
+                            batch_size % max_prefill_batch_size,
+                            do_sample
+                        )
+                        _, prefill_batch, _ = self.generate_token([batch])
+                        batches.append(prefill_batch)
 
-                _, decode_batch, _ = self.generate_token(batches)
-                _, decode_batch, _ = self.generate_token([decode_batch])
-                del decode_batch
-                batches.clear()
+                    _, decode_batch, _ = self.generate_token(batches)
+                    _, decode_batch, _ = self.generate_token([decode_batch])
+                    del decode_batch
+                    batches.clear()
 
         except Exception:
             raise RuntimeError(
@@ -1417,5 +1428,6 @@ class CausalLM(Model):
 
         max_input_tokens = max_input_tokens
         max_total_tokens = MAX_TOTAL_TOKENS
-
+        end = time.time()
+        logger.info(f"Warmup time: {end - start}")        
         return max_supported_total_tokens, max_input_tokens, max_total_tokens

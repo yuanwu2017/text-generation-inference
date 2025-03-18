@@ -22,6 +22,7 @@ from text_generation_server.utils.logits_process import (
 from text_generation_server.utils.watermark import WatermarkLogitsProcessor
 from transformers import PreTrainedTokenizerBase, RepetitionPenaltyLogitsProcessor
 import os
+from loguru import logger
 
 
 class NextTokenChooser:
@@ -295,7 +296,7 @@ class HeterogeneousNextTokenChooser:
             if any([grammar != "" for grammar in grammars])
             else None
         )
-
+        logger.info(f"sample={do_sample}")
         if any(x != 1.0 for x in temperature):
             do_sample = [
                 sample or x != 1.0 for x, sample in zip(temperature, do_sample)
@@ -538,7 +539,7 @@ def pad_next_token_chooser_parameters(
         top_k=0,
         top_p=1.0,
         typical_p=1.0,
-        do_sample=False,
+        do_sample=parameters[0].do_sample,
         seed=0,
         repetition_penalty=1.0,
         frequency_penalty=0.0,

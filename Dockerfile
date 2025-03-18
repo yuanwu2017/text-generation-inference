@@ -253,6 +253,6 @@ FROM base
 COPY ./tgi-entrypoint.sh /tgi-entrypoint.sh
 RUN chmod +x /tgi-entrypoint.sh
 
-ENV LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/root/.local/share/uv/python/cpython-3.11.11-linux-x86_64-gnu/lib/"
-ENTRYPOINT ["/tgi-entrypoint.sh"]
+#ENV LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/root/.local/share/uv/python/cpython-3.11.11-linux-x86_64-gnu/lib/"
+#ENTRYPOINT ["/tgi-entrypoint.sh"]
 # CMD ["--json-output"]
