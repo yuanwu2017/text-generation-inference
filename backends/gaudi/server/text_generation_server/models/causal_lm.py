@@ -1381,12 +1381,12 @@ class CausalLM(Model):
 
         try:
             do_samples = [True, False]
-            logger.info(f"Warmup {len(do_samples)*len(decode_batch_size_list)} cases of decode batch sizes.")
-            i = 0
+            logger.info(f"Warmup {len(do_samples)*len(decode_batch_size_list)} cases of decode batch sizes {decode_batch_size_list}.")
+            step = 0
             for do_sample in do_samples:
                 for batch_size in decode_batch_size_list:
-                    logger.info(f"Warmup case {i}: batch_szie={batch_size}, do_sample={do_sample}")
-                    i = i + 1
+                    logger.info(f"Warmup case {step}: batch_szie={batch_size}, do_sample={do_sample}")
+                    step = step + 1
                     batches = []
                     iters = math.floor(batch_size / max_prefill_batch_size)
                     for i in range(iters):

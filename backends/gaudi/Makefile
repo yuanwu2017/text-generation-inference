@@ -2,13 +2,13 @@ mkfile_path := $(abspath $(lastword $(MAKEFILE_LIST)))
 mkfile_dir := $(dir $(mkfile_path))
 root_dir := "${mkfile_dir}/../.."
 
-HABANA_VERSION := 1.20.0
-PYTORCH_VERSION := 2.6.0
+HABANA_VERSION := 1.19.0
+PYTORCH_VERSION := 2.5.1
 
 .PHONY:	image run-local-dev-container install-dependencies install-server install-router install-launcher local-dev-install
 
 image:
-	docker build -t tgi-gaudi -f ${root_dir}/Dockerfile_gaudi ${root_dir} --build-arg HABANA_VERSION=$(HABANA_VERSION) --build-arg PYTORCH_VERSION=$(PYTORCH_VERSION) --build-arg http_proxy=${http_proxy} --build-arg https_proxy=${https_proxy} --build-arg no_proxy=${no_proxy}
+	docker build -t tgi-gaudi -f ${root_dir}/Dockerfile_gaudi ${root_dir} --build-arg HABANA_VERSION=$(HABANA_VERSION) --build-arg PYTORCH_VERSION=$(PYTORCH_VERSION)
 
 run-local-dev-container:
 		docker run -it \
