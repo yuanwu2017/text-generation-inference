@@ -51,9 +51,12 @@ class SignalHandler:
         signal.signal(signal.SIGINT, self.exit_gracefully)
         signal.signal(signal.SIGTERM, self.exit_gracefully)
 
+    def set_keep_processing(self, value: bool):
+        self.KEEP_PROCESSING = value
+
     def exit_gracefully(self, signum, frame):
         print(f"Exiting gracefully: Signal {signum}")
-        self.KEEP_PROCESSING = False
+        self.set_keep_processing(False)
 
 
 class TextGenerationService(generate_pb2_grpc.TextGenerationServiceServicer):
@@ -136,7 +139,19 @@ class TextGenerationService(generate_pb2_grpc.TextGenerationServiceServicer):
                 request.batch, self.model.tokenizer, self.model.dtype, self.model.device
             )
 
-        generations, next_batch, timings = self.model.generate_token([batch])
+        concat_ns = None
+        if self.model.support_chunking:
+            if request.HasField("cached_batch"):
+                cached_batch = self.cache.pop(request.cached_batch.id)
+                if cached_batch is None:
+                    raise ValueError(
+                        f"Batch ID {request.cached_batch.id} not found in cache."
+                    )
+                start_concat = time.time_ns()
+                batch = self.model.batch_type.concatenate([cached_batch, batch])
+                concat_ns = time.time_ns() - start_concat
+
+        generations, next_batch, timings = self.model.generate_token(batch)
         self.cache.set(next_batch)
 
         return generate_pb2.PrefillResponse(
@@ -145,6 +160,7 @@ class TextGenerationService(generate_pb2_grpc.TextGenerationServiceServicer):
             forward_ns=timings[0],
             decode_ns=timings[1],
             total_ns=time.time_ns() - start,
+            concat_ns=concat_ns,
         )
 
     async def Decode(self, request, context):
@@ -162,13 +178,21 @@ class TextGenerationService(generate_pb2_grpc.TextGenerationServiceServicer):
         if len(batches) == 0:
             raise ValueError("All batches are empty")
 
-        generations, next_batch, timings = self.model.generate_token(batches)
+        if len(batches) > 1:
+            start_concat = time.time_ns()
+            batch = self.model.batch_type.concatenate(batches)
+            concat_ns = time.time_ns() - start_concat
+        else:
+            batch = batches[0]
+            concat_ns = None
+
+        generations, next_batch, timings = self.model.generate_token(batch)
         self.cache.set(next_batch)
 
         return generate_pb2.DecodeResponse(
             generations=[generation.to_pb() for generation in generations],
             batch=next_batch.to_pb() if next_batch else None,
-            concat_ns=None,
+            concat_ns=concat_ns,
             forward_ns=timings[0],
             decode_ns=timings[1],
             total_ns=time.time_ns() - start,
