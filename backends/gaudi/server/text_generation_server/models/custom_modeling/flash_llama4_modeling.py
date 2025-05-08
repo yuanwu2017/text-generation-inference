@@ -303,7 +303,7 @@ class Llama4TextMoe(nn.Module):
         # assert isinstance(self.experts, MoELayer)
 
 
-        self.experts = Llama4TextExperts(config=config, prefix=f"{prefix}.experts", weights=weights)
+        self.experts = Llama4TextExperts(config=config, prefix=f"{prefix}.experts", weights=weights, layer_idx=layer_idx)
         synchronize(weights.device)
         real_free_memory = get_free_memory(weights.device, 1)
         log_master(
@@ -319,7 +319,7 @@ class Llama4TextMoe(nn.Module):
             logger.debug,
             f"TextMode2 Free memory real: {real_free_memory / 1e9:.2f}GB"
         )
-        self.shared_expert = Llama4TextMLP(config=config, prefix=f"{prefix}.shared_expert", weights=weights)
+        self.shared_expert = Llama4TextMLP(config=config, prefix=f"{prefix}.shared_expert", weights=weights, layer_idx=layer_idx)
         synchronize(weights.device)
         real_free_memory = get_free_memory(weights.device, 1)
         log_master(
